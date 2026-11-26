@@ -1,64 +1,157 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:wether_app/models/weather_data.dart';
+import 'package:wether_app/screens/city_search_screen.dart';
+import 'package:wether_app/services/location_service.dart';
+import 'package:wether_app/services/weather_exception.dart';
+import 'package:wether_app/services/weather_service.dart';
 import 'package:wether_app/utilities/constants.dart';
 import 'package:wether_app/utilities/formatters.dart';
+import 'package:wether_app/utilities/weather_visuals.dart';
 import 'package:wether_app/widgets/current_weather_header.dart';
 import 'package:wether_app/widgets/gradient_background.dart';
 import 'package:wether_app/widgets/info_tile.dart';
 import 'package:wether_app/widgets/sun_times_card.dart';
 import 'package:wether_app/widgets/wind_compass.dart';
-// Checkpoint version: shows the data it receives.
-// Part 3 adds: colours by weather, refresh, search and error messages.
-class WeatherScreen extends StatelessWidget {
- const WeatherScreen({super.key, required this.weather});
+class WeatherScreen extends StatefulWidget {
+ const WeatherScreen({super.key, required this.weather, this.city});
+ /// The first weather data, downloaded by the LoadingScreen.
  final WeatherData weather;
+ /// The searched city, or null when we use the GPS location.
+ final String? city;
+ @override
+ State<WeatherScreen> createState() => _WeatherScreenState();
+}
+class _WeatherScreenState extends State<WeatherScreen> {
+ final LocationService _locationService = LocationService();
+ final WeatherService _weatherService = WeatherService();
+ late WeatherData _weather; // what is on screen now
+ String? _city; // null = "my location"
+ bool _isLoading = false;
+ @override
+ void initState() {
+   super.initState();
+   _weather = widget.weather;
+   _city = widget.city;
+ }
+ /// Downloads new weather. city == null means "use my GPS location".
+ Future<void> _loadWeather(String? city) async {
+   setState(() => _isLoading = true);
+   try {
+     final WeatherData weather;
+     if (city == null) {
+       final position = await _locationService.getCurrentPosition();
+       weather = await _weatherService.getWeatherByLocation(
+         position.latitude,
+         position.longitude,
+       );
+     } else {
+       weather = await _weatherService.getWeatherByCity(city);
+     }
+     if (!mounted) return;
+     setState(() {
+       _weather = weather;
+       _city = city;
+     });
+   } on WeatherException catch (e) {
+     if (!mounted) return;
+     // Keep the old weather on screen and show a short message.
+     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+   } finally {
+    if (mounted) setState(() => _isLoading = false);
+   }
+ }
+ Future<void> _openSearch() async {
+   final String? city = await Navigator.push<String>(
+     context,
+     MaterialPageRoute(builder: (context) => const CitySearchScreen()),
+   );
+   if (city != null) await _loadWeather(city);
+ }
  @override
  Widget build(BuildContext context) {
-   final WeatherData w = weather;
+   final WeatherData w = _weather; // short name for the code below
    return Scaffold(
+     extendBodyBehindAppBar: true,
+     appBar: AppBar(
+       backgroundColor: Colors.transparent,
+       scrolledUnderElevation: 0, // stay transparent while scrolling
+       leading: IconButton(
+         tooltip: 'My location',
+         icon: const Icon(CupertinoIcons.location_fill),
+         onPressed: _isLoading ? null : () => _loadWeather(null),
+       ),
+       actions: [
+         IconButton(
+           tooltip: 'Search city',
+           icon: const Icon(CupertinoIcons.search),
+           onPressed: _isLoading ? null : _openSearch,
+         ),
+       ],
+       bottom: _isLoading
+           ? const PreferredSize(
+               preferredSize: Size.fromHeight(2.0),
+               child: LinearProgressIndicator(minHeight: 2.0),
+             )
+           : null,
+     ),
      body: GradientBackground(
-       colors: const [Color(0xFF1E6FD9), Color(0xFF4FA3E8)],
+       colors: backgroundColors(w),
        child: SafeArea(
-         child: ListView(
-           padding: const EdgeInsets.all(kScreenPadding),
-           children: [
-             CurrentWeatherHeader(weather: w),
-             const SizedBox(height: 32.0),
-             SunTimesCard(
-               sunrise: w.toCityTime(w.sunrise),
-               sunset: w.toCityTime(w.sunset),
-             ),
-             const SizedBox(height: kGap),
-             _TileRow(
-               left: InfoTile(
-                 icon: CupertinoIcons.thermometer,
-                 label: 'Feels like',
-                 value: '${w.feelsLike.round()}°',
+         child: RefreshIndicator(
+           onRefresh: () => _loadWeather(_city), // pull down to refresh
+           child: ListView(
+             // AlwaysScrollable so pull-to-refresh works even if the content is short
+             physics: const AlwaysScrollableScrollPhysics(),
+             padding: const EdgeInsets.all(kScreenPadding),
+             children: [
+               CurrentWeatherHeader(weather: w),
+               const SizedBox(height: 32.0),
+               SunTimesCard(
+                 sunrise: w.toCityTime(w.sunrise),
+                 sunset: w.toCityTime(w.sunset),
                ),
-               right: InfoTile(
-                 icon: CupertinoIcons.drop_fill,
-                 label: 'Humidity',
-                 value: '${w.humidity}%',
+               const SizedBox(height: kGap),
+               _TileRow(
+                 left: InfoTile(
+                   icon: CupertinoIcons.thermometer,
+                   label: 'Feels like',
+                   value: '${w.feelsLike.round()}°',
+                   caption: w.feelsLike < w.temperature
+                       ? 'Colder than it looks'
+                       : 'Similar to actual',
+                 ),
+                 right: InfoTile(
+                   icon: CupertinoIcons.drop_fill,
+                   label: 'Humidity',
+                   value: '${w.humidity}%',
+                   caption: w.humidity > 70 ? 'Quite humid' : 'Comfortable',
+                 ),
                ),
-             ),
-             const SizedBox(height: kGap),
-             _TileRow(
-               left: InfoTile(
-                 icon: CupertinoIcons.wind,
-                 label: 'Wind',
-                 value: '${w.windSpeed.toStringAsFixed(1)} m/s',
-                 caption: 'From ${compassDirection(w.windDeg)}',
-                 trailing: WindCompass(degrees: w.windDeg),
+               const SizedBox(height: kGap),
+               _TileRow(
+                 left: InfoTile(
+                   icon: CupertinoIcons.wind,
+                   label: 'Wind',
+                   value: '${w.windSpeed.toStringAsFixed(1)} m/s',
+                   caption: 'From ${compassDirection(w.windDeg)}',
+                   trailing: WindCompass(degrees: w.windDeg),
+                 ),
+                 right: InfoTile(
+                   icon: CupertinoIcons.gauge,
+                   label: 'Pressure',
+                   value: '${w.pressure} hPa',
+                   caption: 'Visibility ${(w.visibility / 1000).toStringAsFixed(1)} km',
+                 ),
                ),
-               right: InfoTile(
-                 icon: CupertinoIcons.gauge,
-                 label: 'Pressure',
-                 value: '${w.pressure} hPa',
-                 caption: 'Visibility ${(w.visibility / 1000).toStringAsFixed(1)} km',
+               const SizedBox(height: 24.0),
+               Text(
+                 'Updated ${formatTime(w.toCityTime(w.updatedAt))} local time  ·  Pull down to refresh',
+                 textAlign: TextAlign.center,
+                 style: kSubtitleTextStyle.copyWith(fontSize: 12.0),
                ),
-             ),
-              ],
+             ],
+           ),
          ),
        ),
      ),
@@ -84,5 +177,8 @@ class _TileRow extends StatelessWidget {
    );
  }
 }
+
+
+
 
 

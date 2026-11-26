@@ -31,7 +31,7 @@ class CurrentWeatherHeader extends StatelessWidget {
        ),
        const SizedBox(height: 4.0),
        Text(
-         'formatDate(cityNow) ·  {formatTime(cityNow)}',
+         '${formatDate(cityNow)} ·  ${formatTime(cityNow)}',
          style: kSubtitleTextStyle,
        ),
        const SizedBox(height: 24.0),

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:wether_app/data/sample_weather.dart';
-import 'package:wether_app/screens/weather_screen.dart';
+import 'package:wether_app/screens/loading_screen.dart';
 void main() {
  runApp(const WeatherApp());
 }
+/// The root of the app. It has no changing state, so a StatelessWidget is enough.
 class WeatherApp extends StatelessWidget {
  const WeatherApp({super.key});
  @override
@@ -16,9 +16,7 @@ class WeatherApp extends StatelessWidget {
        colorSchemeSeed: Colors.teal,
        useMaterial3: true,
      ),
-     // Part 1: show the screen with fake data.
-     // Part 2: this becomes `const LoadingScreen()`.
-     home: WeatherScreen(weather: sampleWeather),
+     home: const LoadingScreen(),
    );
  }
 }

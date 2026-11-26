@@ -8,7 +8,7 @@ class WeatherData {
    required this.country,
    required this.conditionId,
    required this.description,
-  required this.iconCode,
+   required this.iconCode,
    required this.temperature,
    required this.feelsLike,
    required this.tempMin,
@@ -23,8 +23,6 @@ class WeatherData {
    required this.updatedAt,
    required this.timezoneOffset,
  });
-
-
  final String city;
  final String country;
  final int conditionId; // e.g. 500 = light rain, 800 = clear sky
@@ -41,21 +39,55 @@ class WeatherData {
  final int windDeg; // direction the wind comes FROM, 0 = north
  final DateTime sunrise; // UTC
  final DateTime sunset; // UTC
-  final DateTime updatedAt; // UTC
+ final DateTime updatedAt; // UTC
  final int timezoneOffset; // seconds from UTC, e.g. 32400 for Korea (+9h)
-
-
- // Step 4 adds:  factory WeatherData.fromJson(Map<String, dynamic> json)
-
-
+ /// Builds a WeatherData from the JSON returned by
+ /// https://api.openweathermap.org/data/2.5/weather
+ ///
+ /// Two lessons hidden in here:
+ /// 1. JSON numbers can be `int` OR `double` (20 vs 20.5), so we read them
+ ///    as `num` and convert with toDouble()/toInt().
+ /// 2. Some fields (wind.gust, visibility, ...) are sometimes missing, so we
+ ///    use `?` and `??` to fall back to a default instead of crashing.
+ factory WeatherData.fromJson(Map<String, dynamic> json) {
+   final Map<String, dynamic> weather =
+       (json['weather'] as List<dynamic>).first as Map<String, dynamic>;
+   final Map<String, dynamic> main = json['main'] as Map<String, dynamic>;
+   final Map<String, dynamic> wind =
+       json['wind'] as Map<String, dynamic>? ?? const <String, dynamic>{};
+   final Map<String, dynamic> sys =
+       json['sys'] as Map<String, dynamic>? ?? const <String, dynamic>{};
+   return WeatherData(
+     city: json['name'] as String? ?? 'Unknown',
+     country: sys['country'] as String? ?? '',
+     conditionId: (weather['id'] as num).toInt(),
+     description: weather['description'] as String? ?? '',
+     iconCode: weather['icon'] as String? ?? '01d',
+     temperature: (main['temp'] as num).toDouble(),
+     feelsLike: (main['feels_like'] as num).toDouble(),
+     tempMin: (main['temp_min'] as num).toDouble(),
+     tempMax: (main['temp_max'] as num).toDouble(),
+     humidity: (main['humidity'] as num).toInt(),
+     pressure: (main['pressure'] as num).toInt(),
+     visibility: (json['visibility'] as num?)?.toInt() ?? 0,
+     windSpeed: (wind['speed'] as num?)?.toDouble() ?? 0.0,
+     windDeg: (wind['deg'] as num?)?.toInt() ?? 0,
+     sunrise: _utcFromSeconds(sys['sunrise']),
+     sunset: _utcFromSeconds(sys['sunset']),
+     updatedAt: _utcFromSeconds(json['dt']),
+     timezoneOffset: (json['timezone'] as num?)?.toInt() ?? 0,
+   );
+    }
+ /// OpenWeather sends times as "seconds since 1 Jan 1970 (UTC)".
+ static DateTime _utcFromSeconds(dynamic seconds) {
+   final int value = (seconds as num?)?.toInt() ?? 0;
+   return DateTime.fromMillisecondsSinceEpoch(value * 1000, isUtc: true);
+ }
  /// Converts a UTC time to the clock time *in this city*
  /// (not in the phone's time zone).
  DateTime toCityTime(DateTime utcTime) =>
      utcTime.toUtc().add(Duration(seconds: timezoneOffset));
-
-
  /// The OpenWeather icon code ends with "d" in daytime and "n" at night.
  bool get isDay => iconCode.endsWith('d');
 }
-
 
