@@ -1,19 +1,24 @@
 import 'package:flutter/material.dart';
-
+import 'package:wether_app/data/sample_weather.dart';
+import 'package:wether_app/screens/weather_screen.dart';
 void main() {
-  runApp(const Weatherapp());
+ runApp(const WeatherApp());
 }
-
-class Weatherapp extends StatefulWidget {
-  const new({super.key});
-
-  @override
-  State<Weatherapp> createState() => _WeatherappState();
-}
-
-class _WeatherappState extends State<Weatherapp> {
-  @override
-  Widget build(BuildContext context) {
-    return const Placeholder();
-  }
+class WeatherApp extends StatelessWidget {
+ const WeatherApp({super.key});
+ @override
+ Widget build(BuildContext context) {
+   return MaterialApp(
+     title: 'Weather',
+     debugShowCheckedModeBanner: false,
+     theme: ThemeData(
+       brightness: Brightness.dark,
+       colorSchemeSeed: Colors.teal,
+       useMaterial3: true,
+     ),
+     // Part 1: show the screen with fake data.
+     // Part 2: this becomes `const LoadingScreen()`.
+     home: WeatherScreen(weather: sampleWeather),
+   );
+ }
 }
